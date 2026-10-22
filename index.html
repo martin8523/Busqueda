@@ -1,1 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Buscador de adherentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2f3f0; --paper:#fff; --ink:#1c2a2d; --muted:#667276; --line:#d9ddd8;
+  --accent:#2c5b60; --ok:#1f7a4d; --ok-bg:#e2f2e9; --off:#7b5a3c; --off-bg:#f1e8de;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "IBM Plex Sans",system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:28px 16px 60px}
+h1{font:500 28px/1.2 "IBM Plex Serif",Georgia,serif;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+[hidden]{display:none!important}
+input{width:100%;font:inherit;font-size:18px;padding:14px 16px;border:2px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+input:focus{outline:none;border-color:var(--accent)}
+.login{max-width:380px;margin:12vh auto 0}
+.login button{width:100%;margin-top:10px;padding:12px;font-size:16px;background:var(--accent);color:#fff;border-color:var(--accent)}
+.search{position:sticky;top:0;background:var(--bg);padding:8px 0 12px;z-index:2}
+.status{font-size:13px;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--paper);color:var(--accent);padding:4px 10px;border-radius:6px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.person{background:var(--paper);border:1px solid var(--line);border-radius:8px;margin:0 0 14px;overflow:hidden}
+.phead{padding:14px 16px 10px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+.name{font-weight:600;font-size:18px}
+.dni{font-variant-numeric:tabular-nums;color:var(--accent);font-weight:500}
+.meta{padding:0 16px 10px;color:var(--muted);font-size:13px}
+.moves{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.mv{padding:10px 16px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;border-bottom:1px solid var(--line)}
+.mv:last-child{border-bottom:0}
+.mv.baja{background:#fafaf8}
+.badge{font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.off{background:var(--off-bg);color:var(--off)}
+.socio{font-weight:500}
+.det{grid-column:2;font-size:13px;color:var(--muted)}
+.empty{padding:40px 8px;text-align:center;color:var(--muted)}
+.err{background:#fbeceb;border:1px solid #e3b5b1;color:#8a2a22;padding:10px 14px;border-radius:8px;margin:10px 0;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
 
+  <section id="login" class="login">
+    <h1>Buscador de adherentes</h1>
+    <p class="sub">Acceso restringido. Ingresá la clave.</p>
+    <input id="pw" type="password" placeholder="Clave" autocomplete="current-password" autofocus>
+    <button id="enter" type="button">Ingresar</button>
+    <div id="lerr"></div>
+  </section>
+
+  <section id="app" hidden>
+    <h1>Buscador de adherentes</h1>
+    <p class="sub">Escribí cualquier dato: nombre, apellido, DNI, número de socio, teléfono, email… completo o parcial.</p>
+    <div class="search">
+      <input id="q" type="search" placeholder="Ej: gonzalez 2345 · 30123456 · 1520" autocomplete="off">
+      <div class="status"><span id="st">Escribí al menos 3 caracteres.</span><button id="exit" type="button">Salir</button></div>
+    </div>
+    <div id="err"></div>
+    <div id="out"></div>
+  </section>
+
+</div>
+
+<script>
+/* ====== CONFIGURACIÓN ====== */
+const API_URL = "https://script.google.com/a/macros/coopsal.com.ar/s/AKfycbxjffMTGqQBtsxEaSGRyvh-P7x9r0YfAiYND6BBQtmJBLsTZt4rsG7NPNLiL0p9ZVmq/exec";   // termina en /exec
+/* ============================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let clave = "";          // vive solo en memoria: no se guarda en el navegador
+let seq = 0;
+
+async function api(body){
+  const res = await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...body,clave})});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  return res.json();
+}
+
+async function entrar(){
+  clave = $("pw").value;
+  $("lerr").innerHTML=""; $("enter").disabled=true;
+  try{
+    const r = await api({accion:"login"});
+    if(!r.ok){ clave=""; $("lerr").innerHTML=`<div class="err">${esc(r.msg||"No se pudo ingresar.")}</div>`; return; }
+    $("pw").value=""; $("login").hidden=true; $("app").hidden=false; $("q").focus();
+  }catch(e){
+    clave=""; $("lerr").innerHTML=`<div class="err">No se pudo conectar con el servidor.</div>`;
+  }finally{ $("enter").disabled=false; }
+}
+
+function salir(){
+  clave=""; $("q").value=""; $("out").innerHTML=""; $("err").innerHTML="";
+  $("app").hidden=true; $("login").hidden=false; $("pw").focus();
+}
+
+function render(res){
+  const out=$("out");
+  if(!res.people.length){ out.innerHTML='<div class="empty">No se encontró ningún adherente con ese dato.</div>'; $("st").textContent=""; return; }
+  $("st").textContent = res.total>res.people.length
+    ? `Mostrando ${res.people.length} de ${res.total}. Agregá más datos para acotar.`
+    : `${res.total} resultado${res.total>1?"s":""}`;
+  out.innerHTML = res.people.map(p=>{
+    const meta=[p.parentesco, p.fecnac&&("Nac. "+p.fecnac), p.tel, p.email].filter(Boolean).map(esc).join(" · ");
+    return `<article class="person">
+      <div class="phead"><span class="name">${esc(p.name)}</span><span class="dni">${esc(p.doc||"DNI")} ${esc(p.numero||"—")}</span></div>
+      ${meta?`<div class="meta">${meta}</div>`:""}
+      <ul class="moves">${p.rows.map(r=>`
+        <li class="mv ${r.activo?"":"baja"}">
+          <span class="badge ${r.activo?"ok":"off"}">${r.activo?"Activo":"Baja"}</span>
+          <span class="socio">Socio ${esc(r.socio)}${r.nombresocio?" — "+esc(r.nombresocio):""}</span>
+          <span class="det">${[
+            r.fecadhfam&&"Adhirió "+esc(r.fecadhfam),
+            r.fecbajaf&&"Baja "+esc(r.fecbajaf),
+            r.estado&&"Estado: "+esc(r.estado),
+            r.estsoc&&"Socio: "+esc(r.estsoc)+(r.fecbajas?" (baja "+esc(r.fecbajas)+")":""),
+            r.tarifa&&"Tarifa "+esc(r.tarifa)
+          ].filter(Boolean).join(" · ")}</span>
+        </li>`).join("")}
+      </ul></article>`;
+  }).join("");
+}
+
+async function buscar(){
+  const q=$("q").value.trim(), mine=++seq;
+  $("err").innerHTML="";
+  if(q.replace(/\s/g,"").length<3){ $("out").innerHTML='<div class="empty">Escribí al menos 3 caracteres.</div>'; $("st").textContent=""; return; }
+  $("st").textContent="Buscando…";
+  try{
+    const r=await api({accion:"buscar",q});
+    if(mine!==seq) return;                       // llegó una respuesta vieja
+    if(!r.ok){
+      if(r.error==="clave"||r.error==="bloqueado"){ salir(); $("lerr").innerHTML=`<div class="err">${esc(r.msg)}</div>`; return; }
+      throw new Error(r.msg||"error");
+    }
+    render(r);
+  }catch(e){
+    if(mine!==seq) return;
+    $("st").textContent=""; $("err").innerHTML=`<div class="err">No se pudo completar la búsqueda. Probá de nuevo.</div>`;
+  }
+}
+
+let t; $("q").addEventListener("input",()=>{clearTimeout(t);t=setTimeout(buscar,400);});
+$("enter").addEventListener("click",entrar);
+$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")entrar();});
+$("exit").addEventListener("click",salir);
+</script>
+</body>
+</html>
