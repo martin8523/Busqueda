@@ -83,7 +83,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--plum);outline-o
     <p class="hint">Escribí cualquier dato: nombre, apellido, DNI, número de socio, teléfono, email… completo o parcial.</p>
     <div class="search">
       <input id="q" type="search" placeholder="Ej: gonzalez 2345 · 30123456 · 1520" autocomplete="off">
-      <div class="status"><span id="st">Escribí al menos 3 caracteres.</span><button class="link" id="exit" type="button">Salir</button></div>
+      <div class="status"><span id="st">Escribí al menos 3 caracteres.</span><span><button class="link" id="refresh" type="button" title="Vuelve a leer la planilla">Actualizar datos</button> <button class="link" id="exit" type="button">Salir</button></span></div>
     </div>
     <div id="err"></div>
     <div id="out"></div>
@@ -141,9 +141,10 @@ async function entrar(){
 function render(res){
   const out=$("out");
   if(!res.people.length){ out.innerHTML='<div class="empty">No se encontró ningún adherente con ese dato.</div>'; $("st").textContent=""; return; }
-  $("st").textContent = res.total>res.people.length
+  const seg = res.t ? ` · ${(res.t/1000).toFixed(1).replace(".",",")} s` : "";
+  $("st").textContent = (res.total>res.people.length
     ? `Mostrando ${res.people.length} de ${res.total}. Agregá más datos para acotar.`
-    : `${res.total} resultado${res.total>1?"s":""}`;
+    : `${res.total} resultado${res.total>1?"s":""}`) + seg;
   out.innerHTML = res.people.map(p=>{
     const meta=[p.parentesco, p.fecnac&&("Nac. "+p.fecnac), p.tel, p.email].filter(Boolean).map(esc).join(" · ");
     const dni = p.numero ? `<span class="dni">${esc(p.doc||"DNI")} ${esc(p.numero)}</span>` : `<span class="dni none">Sin DNI cargado</span>`;
@@ -171,8 +172,10 @@ async function buscar(){
   $("err").innerHTML="";
   if(q.replace(/\s/g,"").length<3){ $("out").innerHTML='<div class="empty">Escribí al menos 3 caracteres.</div>'; $("st").textContent=""; return; }
   $("st").textContent="Buscando…";
+  const t0=performance.now();
   try{
     const r=await api({accion:"buscar",q});
+    r.t=performance.now()-t0;
     if(mine!==seq) return;                       // llegó una respuesta vieja
     if(!r.ok){
       if(r.error==="sesion"||r.error==="clave"||r.error==="bloqueado"){ salir(r.msg); return; }
@@ -195,10 +198,21 @@ async function iniciar(){
   salir();
 }
 
-let t; $("q").addEventListener("input",()=>{clearTimeout(t);t=setTimeout(buscar,400);});
+let t; $("q").addEventListener("input",()=>{clearTimeout(t);t=setTimeout(buscar,250);});
 $("enter").addEventListener("click",entrar);
 $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")entrar();});
+$("q").addEventListener("keydown",e=>{if(e.key==="Enter"){clearTimeout(t);buscar();}});
 $("exit").addEventListener("click",()=>salir());
+$("refresh").addEventListener("click",async()=>{
+  $("refresh").disabled=true; $("st").textContent="Actualizando datos…";
+  try{
+    const r=await api({accion:"refrescar"});
+    if(!r.ok){ if(r.error==="sesion"){ salir(r.msg); return; } throw new Error(); }
+    $("st").textContent=`Datos actualizados (${r.personas} personas).`;
+    if($("q").value.trim()) buscar();
+  }catch(e){ $("st").textContent=""; $("err").innerHTML=`<div class="err">No se pudieron actualizar los datos.</div>`; }
+  finally{ $("refresh").disabled=false; }
+});
 iniciar();
 </script>
 </body>
